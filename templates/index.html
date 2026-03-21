@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Calendar Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🤖 AI Calendar Assistant</h1>
+            <div class="demo-banner" id="demoBanner" style="display: none;">
+                📋 Portfolio Demo - Using Sample Gmail Calendar Data
+            </div>
+            <div class="info">
+                <div class="date">📅 Today: {{ today }}</div>
+                <div class="email">📧 Calendar: {{ email }}</div>
+            </div>
+        </header>
+
+        <main class="main">
+            <div class="mode-selector">
+                <div class="mode-toggle">
+                    <button id="demoModeBtn" class="mode-btn active">📋 Demo Mode</button>
+                    <button id="liveModeBtn" class="mode-btn">🔗 Live Calendar</button>
+                </div>
+                <div class="api-key-section" id="apiKeySection" style="display: none;">
+                    <input type="password" id="claudeApiKey" placeholder="Enter Claude API Key (optional for AI analysis)" class="api-key-input">
+                    <small>💡 Leave empty for rule-based analysis</small>
+                </div>
+            </div>
+
+            <div class="action-section">
+                <button id="getSummaryBtn" class="summary-btn">
+                    <span class="btn-text">Get Today's Summary</span>
+                    <span class="btn-loading" style="display: none;">Analyzing...</span>
+                </button>
+            </div>
+
+            <div id="results" class="results" style="display: none;">
+                <!-- Results will be populated here -->
+            </div>
+
+            <div id="error" class="error" style="display: none;">
+                <!-- Error messages will be shown here -->
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let currentMode = 'demo'; // Default to demo mode
+
+        // Mode toggle functionality
+        document.getElementById('demoModeBtn').addEventListener('click', function() {
+            currentMode = 'demo';
+            document.getElementById('demoModeBtn').classList.add('active');
+            document.getElementById('liveModeBtn').classList.remove('active');
+            document.getElementById('demoBanner').style.display = 'block';
+            document.getElementById('apiKeySection').style.display = 'block';
+        });
+
+        document.getElementById('liveModeBtn').addEventListener('click', function() {
+            currentMode = 'live';
+            document.getElementById('liveModeBtn').classList.add('active');
+            document.getElementById('demoModeBtn').classList.remove('active');
+            document.getElementById('demoBanner').style.display = 'none';
+            document.getElementById('apiKeySection').style.display = 'none';
+        });
+
+        // Initialize demo mode on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('demoBanner').style.display = 'block';
+            document.getElementById('apiKeySection').style.display = 'block';
+        });
+
+        document.getElementById('getSummaryBtn').addEventListener('click', function() {
+            const btn = this;
+            const btnText = btn.querySelector('.btn-text');
+            const btnLoading = btn.querySelector('.btn-loading');
+            const results = document.getElementById('results');
+            const error = document.getElementById('error');
+
+            // Show loading state
+            btn.disabled = true;
+            btnText.style.display = 'none';
+            btnLoading.style.display = 'inline';
+            results.style.display = 'none';
+            error.style.display = 'none';
+
+            // Build API URL based on mode
+            let apiUrl = '/get_summary';
+            const params = new URLSearchParams();
+            
+            if (currentMode === 'demo') {
+                params.append('demo', 'true');
+                const claudeKey = document.getElementById('claudeApiKey').value.trim();
+                if (claudeKey) {
+                    params.append('claude_key', claudeKey);
+                }
+            }
+            
+            if (params.toString()) {
+                apiUrl += '?' + params.toString();
+            }
+
+            // Make API call
+            fetch(apiUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showError(data.message);
+                    } else {
+                        showResults(data);
+                    }
+                })
+                .catch(err => {
+                    showError('Network error: Please check your internet connection.');
+                })
+                .finally(() => {
+                    // Reset button state
+                    btn.disabled = false;
+                    btnText.style.display = 'inline';
+                    btnLoading.style.display = 'none';
+                });
+        });
+
+        function showError(message) {
+            const error = document.getElementById('error');
+            error.innerHTML = `
+                <div class="error-content">
+                    <h3>⚠️ Error</h3>
+                    <p>${message}</p>
+                </div>
+            `;
+            error.style.display = 'block';
+        }
+
+        function showResults(data) {
+            const results = document.getElementById('results');
+            
+            if (data.message) {
+                // No meetings case
+                results.innerHTML = `
+                    <div class="no-meetings">
+                        <h2>${data.message}</h2>
+                    </div>
+                `;
+            } else {
+                // Show full results
+                results.innerHTML = `
+                    <div class="summary-section">
+                        <h2>📊 Daily Summary</h2>
+                        <div class="ai-summary">${formatSummaryAsBullets(data.summary)}</div>
+                        <div class="ai-badge">Powered by ${data.ai_provider.toUpperCase()}</div>
+                    </div>
+
+                    <div class="stats-section">
+                        <h3>📈 Snapshot</h3>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <span class="stat-number">${data.stats.total}</span>
+                                <span class="stat-label">Total Meetings</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number">${data.stats.hours}</span>
+                                <span class="stat-label">Hours</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="meeting-types-section">
+                        <div class="meeting-type-row">
+                            <div class="meeting-type-card">
+                                <h3>🆕 New Meetings</h3>
+                                <div class="meeting-count">${data.stats.new}</div>
+                                ${data.events.new && data.events.new.length > 0 ? renderEventList(data.events.new) : '<p class="no-meetings-text">No new meetings</p>'}
+                            </div>
+                            <div class="meeting-type-card">
+                                <h3>🔄 Recurring Meetings</h3>
+                                <div class="meeting-count">${data.stats.recurring}</div>
+                                ${data.events.recurring && data.events.recurring.length > 0 ? renderEventList(data.events.recurring) : '<p class="no-meetings-text">No recurring meetings</p>'}
+                            </div>
+                        </div>
+                        
+                        <div class="meeting-type-row">
+                            <div class="meeting-type-card">
+                                <h3>📋 With Agenda</h3>
+                                <div class="meeting-count">${data.stats.with_agenda}</div>
+                                ${data.events.with_agenda && data.events.with_agenda.length > 0 ? renderEventList(data.events.with_agenda) : '<p class="no-meetings-text">No meetings with agenda</p>'}
+                            </div>
+                            <div class="meeting-type-card">
+                                <h3>❓ Without Agenda</h3>
+                                <div class="meeting-count">${data.stats.without_agenda}</div>
+                                ${data.events.without_agenda && data.events.without_agenda.length > 0 ? renderEventList(data.events.without_agenda) : '<p class="no-meetings-text">No meetings without agenda</p>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            results.style.display = 'block';
+        }
+
+        function formatSummaryAsBullets(summary) {
+            // Convert summary to one-liner bullet points
+            const sentences = summary.split(/[.!?]+/).filter(s => s.trim().length > 0);
+            const bullets = sentences.map(sentence => {
+                const trimmed = sentence.trim();
+                // Keep only the first part if it's too long, or split at comma
+                const shortSentence = trimmed.length > 60 ? 
+                    (trimmed.includes(',') ? trimmed.split(',')[0] : trimmed.substring(0, 60) + '...') : 
+                    trimmed;
+                return `• ${shortSentence}`;
+            }).join('<br>');
+            return bullets;
+        }
+
+        function renderEventList(events) {
+            return events.map(event => `
+                <div class="event-item">
+                    <div class="event-title">${event.title}</div>
+                    <div class="event-time">⏰ ${event.start_time} - ${event.end_time}</div>
+                    ${event.description ? `<div class="event-description">📋 ${event.description}</div>` : ''}
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""
+Flask Web App for AI Calendar Assistant
+"""
+
+import os
+from flask import Flask, render_template, jsonify, request
+from datetime import datetime
+import traceback
+from calendar_client import CalendarClient
+from ai_processor import AIProcessor
+from mock_data import get_mock_events, get_mock_summary, get_rule_based_summary
+
+app = Flask(__name__)
+
+# Global variables to store instances
+calendar_client = None
+ai_processor = None
+
+def get_user_email():
+    """Get user's email from Google Calendar"""
+    try:
+        # Initialize calendar client if needed
+        global calendar_client
+        if not calendar_client:
+            calendar_client = CalendarClient()
+            calendar_client.authenticate()
+        
+        if calendar_client and calendar_client.service:
+            # Try to get user info from calendar service
+            calendar_list = calendar_client.service.calendarList().list().execute()
+            for calendar in calendar_list.get('items', []):
+                if calendar.get('primary'):
+                    return calendar.get('id', 'Connected')
+        return 'Connected'
+    except Exception:
+        return 'Not connected'
+
+@app.route('/')
+def index():
+    """Main page"""
+    today = datetime.now().strftime('%B %d, %Y')
+    email = get_user_email()
+    return render_template('index.html', today=today, email=email)
+
+@app.route('/get_summary')
+def get_summary():
+    """Get calendar summary via AJAX - supports both demo and live modes"""
+    global calendar_client, ai_processor
+    
+    # Check if demo mode is requested
+    demo_mode = request.args.get('demo', 'false').lower() == 'true'
+    claude_api_key = request.args.get('claude_key', '').strip()
+    
+    try:
+        if demo_mode:
+            # Use mock data for demo
+            events = get_mock_events()
+            
+            # Use AI if API key provided, otherwise rule-based
+            if claude_api_key:
+                try:
+                    # Temporarily set API key for this request
+                    os.environ['CLAUDE_API_KEY'] = claude_api_key
+                    ai_processor = AIProcessor()
+                    categorization = ai_processor.categorize_events(events)
+                    ai_provider = 'claude'
+                except Exception:
+                    # Fall back to rule-based if AI fails
+                    categorization = categorize_events_rule_based(events)
+                    ai_provider = 'rule-based'
+            else:
+                categorization = categorize_events_rule_based(events)
+                ai_provider = 'rule-based'
+                
+        else:
+            # Original live mode logic
+            if not calendar_client:
+                calendar_client = CalendarClient()
+                if not calendar_client.authenticate():
+                    return jsonify({
+                        'error': True,
+                        'message': 'Failed to connect to Google Calendar. Please check your credentials.json file.'
+                    })
+            
+            events = calendar_client.get_todays_events()
+            
+            if not events:
+                return jsonify({
+                    'error': False,
+                    'message': 'No meetings scheduled for today! 🎉 Enjoy your free day!',
+                    'events': [],
+                    'summary': 'No meetings scheduled for today.',
+                    'stats': {
+                        'total': 0,
+                        'hours': 0,
+                        'recurring': 0,
+                        'new': 0,
+                        'with_agenda': 0,
+                        'without_agenda': 0
+                    }
+                })
+            
+            if not ai_processor:
+                ai_processor = AIProcessor()
+            
+            categorization = ai_processor.categorize_events(events)
+            ai_provider = ai_processor.ai_provider if ai_processor.ai_provider else 'rule-based'
+        
+        # Calculate statistics
+        all_events = categorization['recurring_meetings'] + categorization['new_meetings']
+        total_hours = sum([(e['end_time'] - e['start_time']).total_seconds() / 3600 for e in all_events])
+        
+        # Format events for display
+        formatted_events = {
+            'recurring': [format_event(e) for e in categorization['recurring_meetings']],
+            'new': [format_event(e) for e in categorization['new_meetings']],
+            'with_agenda': [format_event(e) for e in categorization['meetings_with_agenda']],
+            'without_agenda': [format_event(e) for e in categorization['meetings_without_agenda']]
+        }
+        
+        stats = {
+            'total': len(all_events),
+            'hours': round(total_hours, 1),
+            'recurring': len(categorization['recurring_meetings']),
+            'new': len(categorization['new_meetings']),
+            'with_agenda': len(categorization['meetings_with_agenda']),
+            'without_agenda': len(categorization['meetings_without_agenda'])
+        }
+        
+        return jsonify({
+            'error': False,
+            'events': formatted_events,
+            'summary': categorization['summary'],
+            'stats': stats,
+            'ai_provider': ai_provider,
+            'demo_mode': demo_mode
+        })
+        
+    except Exception as e:
+        error_msg = str(e)
+        if 'credentials.json' in error_msg:
+            error_msg = 'Google Calendar credentials not found. Using demo mode with sample data.'
+            # Fall back to demo mode
+            return get_summary_demo_fallback()
+        elif 'API key' in error_msg:
+            error_msg = 'AI API key not configured. Using rule-based categorization.'
+        elif 'No module named' in error_msg:
+            error_msg = 'Missing dependencies. Please run: pip install -r requirements.txt'
+        else:
+            error_msg = f'An error occurred: {error_msg}'
+        
+        return jsonify({
+            'error': True,
+            'message': error_msg,
+            'details': traceback.format_exc() if app.debug else None
+        })
+
+def categorize_events_rule_based(events):
+    """Rule-based event categorization for demo mode"""
+    recurring_meetings = [e for e in events if e['recurring']]
+    new_meetings = [e for e in events if not e['recurring']]
+    meetings_with_agenda = [e for e in events if e['description'].strip()]
+    meetings_without_agenda = [e for e in events if not e['description'].strip()]
+    
+    return {
+        'recurring_meetings': recurring_meetings,
+        'new_meetings': new_meetings,
+        'meetings_with_agenda': meetings_with_agenda,
+        'meetings_without_agenda': meetings_without_agenda,
+        'summary': get_rule_based_summary()
+    }
+
+def get_summary_demo_fallback():
+    """Fallback to demo mode when live mode fails"""
+    events = get_mock_events()
+    categorization = categorize_events_rule_based(events)
+    
+    all_events = categorization['recurring_meetings'] + categorization['new_meetings']
+    total_hours = sum([(e['end_time'] - e['start_time']).total_seconds() / 3600 for e in all_events])
+    
+    formatted_events = {
+        'recurring': [format_event(e) for e in categorization['recurring_meetings']],
+        'new': [format_event(e) for e in categorization['new_meetings']],
+        'with_agenda': [format_event(e) for e in categorization['meetings_with_agenda']],
+        'without_agenda': [format_event(e) for e in categorization['meetings_without_agenda']]
+    }
+    
+    stats = {
+        'total': len(all_events),
+        'hours': round(total_hours, 1),
+        'recurring': len(categorization['recurring_meetings']),
+        'new': len(categorization['new_meetings']),
+        'with_agenda': len(categorization['meetings_with_agenda']),
+        'without_agenda': len(categorization['meetings_without_agenda'])
+    }
+    
+    return jsonify({
+        'error': False,
+        'events': formatted_events,
+        'summary': categorization['summary'],
+        'stats': stats,
+        'ai_provider': 'rule-based',
+        'demo_mode': True,
+        'fallback_message': 'Switched to demo mode with sample data'
+    })
+
+def format_event(event):
+    """Format event for display"""
+    return {
+        'title': event['summary'],
+        'start_time': event['start_time'].strftime('%I:%M %p').lstrip('0'),
+        'end_time': event['end_time'].strftime('%I:%M %p').lstrip('0'),
+        'duration': int((event['end_time'] - event['start_time']).total_seconds() / 60),
+        'description': event['description'][:100] + '...' if len(event['description']) > 100 else event['description'],
+        'location': event['location'],
+        'attendees': event['attendees'],
+        'recurring': event['recurring']
+    }
+
+@app.route('/health')
+def health():
+    """Health check endpoint"""
+    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+
+# Set Claude API key from environment if available (for both local and production)
+claude_key = os.getenv('CLAUDE_API_KEY') or os.getenv('ANTHROPIC_API_KEY')
+if claude_key:
+    os.environ['CLAUDE_API_KEY'] = claude_key
+
+if __name__ == '__main__':
+    print("🚀 Starting Calendar Assistant Web App...")
+    print("📱 Open your browser to: http://localhost:5001")
+    print("⏹️  Press Ctrl+C to stop the server")
+    
+    app.run(debug=True, host='localhost', port=5001)
