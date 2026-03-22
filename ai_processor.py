@@ -57,19 +57,13 @@ class AIProcessor:
                 print("🔄 Detected Claude API key in OPENAI_API_KEY environment variable")
         
         if not api_key:
-            print("⚠️  Claude API key not found!")
-            print("Please set CLAUDE_API_KEY or ANTHROPIC_API_KEY environment variable or enter it when prompted.")
-            api_key = input("Enter your Claude API key (or press Enter to skip): ").strip()
+            # Don't prompt for input in web app context
+            return False
         
         if api_key:
             try:
                 self.claude_client = anthropic.Anthropic(api_key=api_key)
-                # Test the connection
-                test_response = self.claude_client.messages.create(
-                    model="claude-3-haiku-20240307",
-                    max_tokens=10,
-                    messages=[{"role": "user", "content": "Hello"}]
-                )
+                # Skip test connection to avoid hanging - just initialize
                 print("✅ Claude client initialized successfully!")
                 self.ai_provider = "claude"
                 return True
@@ -91,9 +85,8 @@ class AIProcessor:
             return False
         
         if not api_key:
-            print("⚠️  OpenAI API key not found!")
-            print("Please set OPENAI_API_KEY environment variable or enter it when prompted.")
-            api_key = input("Enter your OpenAI API key (or press Enter to skip): ").strip()
+            # Don't prompt for input in web app context
+            return False
         
         if api_key and not api_key.startswith('sk-ant-'):
             try:
@@ -124,29 +117,40 @@ class AIProcessor:
         try:
             events_text = self._format_events_for_ai(events)
             
-            prompt = f"""Analyze these calendar events and categorize them. Return ONLY a JSON response with this exact structure:
+            prompt = f"""Analyze these calendar events for a Product Manager and provide detailed actionable insights. Return ONLY a JSON response with this exact structure:
 
 {{
     "recurring_meetings": [list of event IDs that are recurring],
     "new_meetings": [list of event IDs that are new/one-time],
     "meetings_with_agenda": [list of event IDs that have clear agenda/description],
     "meetings_without_agenda": [list of event IDs that lack agenda/description],
-    "summary": "A brief summary of the day's schedule"
+    "summary": "PM-focused analysis with exactly 6 bullet points separated by newlines. Each point on separate line with proper line breaks."
 }}
 
 Events to analyze:
 {events_text}
 
-Focus on:
-1. Recurring vs new meetings (check if recurring field is true)
-2. Meetings with meaningful descriptions vs those without
-3. Overall day structure and workload
+Create a summary with exactly 6 bullet points covering:
+• Day intensity assessment (busy/moderate/light) with specific reasoning
+• Best focus time windows with exact time ranges (e.g. 9:00-10:30 AM)
+• Meeting overlap analysis - identify specific conflicts and timing issues
+• Agenda quality evaluation - which meetings lack preparation
+• Strategic productivity recommendations for the PM
+• Meeting distribution insights and energy management tips
+
+CRITICAL FORMATTING RULES:
+- Exactly 6 bullet points maximum
+- Use \\n between each bullet point for proper line breaks
+- Each bullet point starts with emoji and bullet symbol
+- Maximum 20 words per bullet point
+- No special characters that break JSON parsing
+- Format: "• 🔥 Point 1\\n• 📊 Point 2\\n• 🎯 Point 3\\n• ⚠️ Point 4\\n• 💡 Point 5\\n• ⏰ Point 6"
 
 Return only the JSON, no other text."""
 
             response = self.claude_client.messages.create(
                 model="claude-3-haiku-20240307",
-                max_tokens=1000,
+                max_tokens=1500,
                 messages=[
                     {"role": "user", "content": prompt}
                 ]
@@ -165,29 +169,33 @@ Return only the JSON, no other text."""
         try:
             events_text = self._format_events_for_ai(events)
             
-            prompt = f"""Analyze these calendar events and categorize them. Return a JSON response with the following structure:
+            prompt = f"""Analyze these calendar events for a Product Manager and provide actionable insights. Return a JSON response with this exact structure:
 
 {{
     "recurring_meetings": [list of event IDs that are recurring],
     "new_meetings": [list of event IDs that are new/one-time],
     "meetings_with_agenda": [list of event IDs that have clear agenda/description],
     "meetings_without_agenda": [list of event IDs that lack agenda/description],
-    "summary": "A brief summary of the day's schedule"
+    "summary": "6-7 bullet points with PM-focused insights. Use emojis and be concise. Include: day intensity, focus time windows, meeting overlaps, agenda gaps, and productivity tips."
 }}
 
 Events to analyze:
 {events_text}
 
-Focus on:
-1. Recurring vs new meetings (check if recurring field is true)
-2. Meetings with meaningful descriptions vs those without
-3. Overall day structure and workload
-"""
+Create a summary with bullet points covering:
+• Day intensity (busy/light/moderate)
+• Best focus time windows
+• Meeting overlaps or conflicts
+• Meetings lacking agendas
+• Productivity recommendations
+• Meeting distribution insights
+
+Keep each point under 15 words. Use relevant emojis. Be direct and actionable for a PM."""
 
             response = self.openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "You are a helpful calendar assistant that categorizes meetings."},
+                    {"role": "system", "content": "You are a calendar assistant for Product Managers. Provide concise, actionable insights with bullet points and emojis."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,

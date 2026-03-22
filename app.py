@@ -62,13 +62,26 @@ def get_summary():
                 try:
                     # Temporarily set API key for this request
                     os.environ['CLAUDE_API_KEY'] = claude_api_key
+                    # Create new AI processor instance for each request to avoid hanging
                     ai_processor = AIProcessor()
+                    print(f"🤖 Starting AI analysis for {len(events)} events...")
                     categorization = ai_processor.categorize_events(events)
                     ai_provider = 'claude'
-                except Exception:
-                    # Fall back to rule-based if AI fails
-                    categorization = categorize_events_rule_based(events)
-                    ai_provider = 'rule-based'
+                    print("✅ AI analysis completed successfully!")
+                except Exception as e:
+                    print(f"❌ AI analysis failed: {e}")
+                    # Check if it's an authentication error
+                    error_msg = str(e)
+                    if 'authentication_error' in error_msg or 'invalid x-api-key' in error_msg or '401' in error_msg:
+                        return jsonify({
+                            'error': True,
+                            'message': 'Invalid Claude API key. Please check your API key and try again.'
+                        })
+                    else:
+                        # Fall back to rule-based for other errors
+                        print("🔄 Falling back to rule-based analysis...")
+                        categorization = categorize_events_rule_based(events)
+                        ai_provider = 'rule-based'
             else:
                 categorization = categorize_events_rule_based(events)
                 ai_provider = 'rule-based'
@@ -101,11 +114,30 @@ def get_summary():
                     }
                 })
             
-            if not ai_processor:
-                ai_processor = AIProcessor()
-            
-            categorization = ai_processor.categorize_events(events)
-            ai_provider = ai_processor.ai_provider if ai_processor.ai_provider else 'rule-based'
+            # Use AI if API key provided, otherwise rule-based
+            if claude_api_key:
+                try:
+                    # Temporarily set API key for this request
+                    os.environ['CLAUDE_API_KEY'] = claude_api_key
+                    ai_processor = AIProcessor()
+                    categorization = ai_processor.categorize_events(events)
+                    ai_provider = 'claude'
+                except Exception as e:
+                    # Check if it's an authentication error
+                    error_msg = str(e)
+                    if 'authentication_error' in error_msg or 'invalid x-api-key' in error_msg or '401' in error_msg:
+                        return jsonify({
+                            'error': True,
+                            'message': 'Invalid Claude API key. Please check your API key and try again.'
+                        })
+                    else:
+                        # Fall back to rule-based for other errors
+                        categorization = categorize_events_rule_based(events)
+                        ai_provider = 'rule-based'
+            else:
+                # Use rule-based categorization for live mode without API key
+                categorization = categorize_events_rule_based(events)
+                ai_provider = 'rule-based'
         
         # Calculate statistics
         all_events = categorization['recurring_meetings'] + categorization['new_meetings']
@@ -156,19 +188,35 @@ def get_summary():
             'details': traceback.format_exc() if app.debug else None
         })
 
+def generate_dynamic_summary(events):
+    """Generate dynamic summary based on actual events passed"""
+    total = len(events)
+    recurring = len([e for e in events if e.get('recurring', False)])
+    new = total - recurring
+    with_agenda = len([e for e in events if e.get('description', '').strip()])
+    
+    if total == 0:
+        return "No meetings scheduled for today! 🎉 Enjoy your free day!"
+    elif total == 1:
+        agenda_text = "has a detailed agenda" if with_agenda == 1 else "has no agenda"
+        meeting_type = "recurring" if recurring == 1 else "new"
+        return f"You have 1 {meeting_type} meeting today that {agenda_text}."
+    else:
+        return f"You have {total} meetings today. {recurring} are recurring, {new} are new. {with_agenda} meetings have detailed agendas."
+
 def categorize_events_rule_based(events):
-    """Rule-based event categorization for demo mode"""
-    recurring_meetings = [e for e in events if e['recurring']]
-    new_meetings = [e for e in events if not e['recurring']]
-    meetings_with_agenda = [e for e in events if e['description'].strip()]
-    meetings_without_agenda = [e for e in events if not e['description'].strip()]
+    """Rule-based event categorization that works for both demo and live data"""
+    recurring_meetings = [e for e in events if e.get('recurring', False)]
+    new_meetings = [e for e in events if not e.get('recurring', False)]
+    meetings_with_agenda = [e for e in events if e.get('description', '').strip()]
+    meetings_without_agenda = [e for e in events if not e.get('description', '').strip()]
     
     return {
         'recurring_meetings': recurring_meetings,
         'new_meetings': new_meetings,
         'meetings_with_agenda': meetings_with_agenda,
         'meetings_without_agenda': meetings_without_agenda,
-        'summary': get_rule_based_summary()
+        'summary': generate_dynamic_summary(events)
     }
 
 def get_summary_demo_fallback():
@@ -230,7 +278,7 @@ if claude_key:
 
 if __name__ == '__main__':
     print("🚀 Starting Calendar Assistant Web App...")
-    print("📱 Open your browser to: http://localhost:5001")
+    print("📱 Open your browser to: http://localhost:5002")
     print("⏹️  Press Ctrl+C to stop the server")
     
-    app.run(debug=True, host='localhost', port=5001)
+    app.run(debug=True, host='localhost', port=5002)

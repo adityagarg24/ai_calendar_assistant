@@ -14,6 +14,7 @@ def get_mock_events():
     mock_events = [
         # Recurring Events
         {
+            'id': 'mock_event_1',
             'summary': 'Daily Standup',
             'start_time': today.replace(hour=9, minute=0),
             'end_time': today.replace(hour=9, minute=15),
@@ -23,6 +24,7 @@ def get_mock_events():
             'recurring': True
         },
         {
+            'id': 'mock_event_2',
             'summary': 'Weekly Team Sync',
             'start_time': today.replace(hour=14, minute=0),
             'end_time': today.replace(hour=15, minute=0),
@@ -32,9 +34,10 @@ def get_mock_events():
             'recurring': True
         },
         {
+            'id': 'mock_event_3',
             'summary': 'Lunch',
-            'start_time': today.replace(hour=14, minute=30),
-            'end_time': today.replace(hour=15, minute=0),
+            'start_time': today.replace(hour=12, minute=30),
+            'end_time': today.replace(hour=13, minute=0),
             'description': '',
             'location': '',
             'attendees': 1,
@@ -43,6 +46,7 @@ def get_mock_events():
         
         # New Meetings
         {
+            'id': 'mock_event_4',
             'summary': 'Client Demo - Syncup',
             'start_time': today.replace(hour=10, minute=30),
             'end_time': today.replace(hour=11, minute=30),
@@ -52,6 +56,7 @@ def get_mock_events():
             'recurring': False
         },
         {
+            'id': 'mock_event_5',
             'summary': 'Quick sync with ABC',
             'start_time': today.replace(hour=15, minute=0),
             'end_time': today.replace(hour=15, minute=30),
@@ -63,6 +68,7 @@ def get_mock_events():
         
         # Meetings with Agenda
         {
+            'id': 'mock_event_6',
             'summary': 'Sprint Planning Sprint 4',
             'start_time': today.replace(hour=11, minute=0),
             'end_time': today.replace(hour=12, minute=30),
@@ -72,6 +78,7 @@ def get_mock_events():
             'recurring': False
         },
         {
+            'id': 'mock_event_7',
             'summary': 'Product Demo Meeting',
             'start_time': today.replace(hour=16, minute=0),
             'end_time': today.replace(hour=17, minute=0),
@@ -83,6 +90,7 @@ def get_mock_events():
         
         # Meetings without Agenda
         {
+            'id': 'mock_event_8',
             'summary': 'Catch up call',
             'start_time': today.replace(hour=13, minute=0),
             'end_time': today.replace(hour=13, minute=30),
@@ -92,6 +100,7 @@ def get_mock_events():
             'recurring': False
         },
         {
+            'id': 'mock_event_9',
             'summary': 'Team coffee chat',
             'start_time': today.replace(hour=17, minute=30),
             'end_time': today.replace(hour=18, minute=0),

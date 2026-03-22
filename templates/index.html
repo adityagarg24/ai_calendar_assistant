@@ -10,24 +10,41 @@
     <div class="container">
         <header class="header">
             <h1>🤖 AI Calendar Assistant</h1>
-            <div class="demo-banner" id="demoBanner" style="display: none;">
-                📋 Portfolio Demo - Using Sample Gmail Calendar Data
-            </div>
             <div class="info">
                 <div class="date">📅 Today: {{ today }}</div>
-                <div class="email">📧 Calendar: {{ email }}</div>
+                <div class="email" id="calendarEmail">📧 Calendar: {{ email }}</div>
+                <div class="mock-data-link" id="mockDataLink" style="display: none;">
+                    <a href="#" id="showMockDataLink">📋 View mock data</a>
+                </div>
             </div>
         </header>
 
         <main class="main">
             <div class="mode-selector">
                 <div class="mode-toggle">
-                    <button id="demoModeBtn" class="mode-btn active">📋 Demo Mode</button>
-                    <button id="liveModeBtn" class="mode-btn">🔗 Live Calendar</button>
+                    <div class="mode-option">
+                        <button id="demoModeBtn" class="mode-btn active">📋 Demo Mode</button>
+                        <small class="mode-description">Uses mock data</small>
+                    </div>
+                    <div class="mode-option">
+                        <button id="liveModeBtn" class="mode-btn">🔗 Live Calendar</button>
+                        <small class="mode-description">Uses integrated Gmail</small>
+                    </div>
                 </div>
-                <div class="api-key-section" id="apiKeySection" style="display: none;">
-                    <input type="password" id="claudeApiKey" placeholder="Enter Claude API Key (optional for AI analysis)" class="api-key-input">
-                    <small>💡 Leave empty for rule-based analysis</small>
+                
+                <div class="analysis-selector">
+                    <div class="analysis-toggle-container">
+                        <span class="toggle-label">📊 Rule-based</span>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="analysisToggle" class="toggle-input">
+                            <label for="analysisToggle" class="toggle-slider"></label>
+                        </div>
+                        <span class="toggle-label">🤖 Use AI</span>
+                    </div>
+                    <div class="api-key-section" id="apiKeySection" style="display: none;">
+                        <input type="password" id="claudeApiKey" placeholder="Enter Claude API Key for AI analysis" class="api-key-input">
+                        <small>🔑 Required for AI-powered insights</small>
+                    </div>
                 </div>
             </div>
 
@@ -36,6 +53,10 @@
                     <span class="btn-text">Get Today's Summary</span>
                     <span class="btn-loading" style="display: none;">Analyzing...</span>
                 </button>
+            </div>
+
+            <div id="mockCalendarData" class="mock-calendar-data" style="display: none;">
+                <!-- Mock calendar events will be displayed here -->
             </div>
 
             <div id="results" class="results" style="display: none;">
@@ -50,29 +71,127 @@
 
     <script>
         let currentMode = 'demo'; // Default to demo mode
+        let currentAnalysis = 'rule-based'; // Default to rule-based
 
         // Mode toggle functionality
         document.getElementById('demoModeBtn').addEventListener('click', function() {
             currentMode = 'demo';
             document.getElementById('demoModeBtn').classList.add('active');
             document.getElementById('liveModeBtn').classList.remove('active');
-            document.getElementById('demoBanner').style.display = 'block';
-            document.getElementById('apiKeySection').style.display = 'block';
+            document.getElementById('mockDataLink').style.display = 'block';
+            
+            // Update calendar text
+            document.getElementById('calendarEmail').textContent = '📧 Calendar: Demo data';
+            
+            // Clear results when switching modes
+            clearResults();
         });
 
         document.getElementById('liveModeBtn').addEventListener('click', function() {
             currentMode = 'live';
             document.getElementById('liveModeBtn').classList.add('active');
             document.getElementById('demoModeBtn').classList.remove('active');
-            document.getElementById('demoBanner').style.display = 'none';
-            document.getElementById('apiKeySection').style.display = 'none';
+            document.getElementById('mockDataLink').style.display = 'none';
+            document.getElementById('mockCalendarData').style.display = 'none';
+            
+            // Update calendar text back to original
+            document.getElementById('calendarEmail').textContent = '📧 Calendar: {{ email }}';
+            
+            // Clear results when switching modes
+            clearResults();
         });
 
-        // Initialize demo mode on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('demoBanner').style.display = 'block';
-            document.getElementById('apiKeySection').style.display = 'block';
+        // Analysis toggle functionality (toggle switch)
+        document.getElementById('analysisToggle').addEventListener('change', function() {
+            if (this.checked) {
+                currentAnalysis = 'ai';
+                document.getElementById('apiKeySection').style.display = 'block';
+            } else {
+                currentAnalysis = 'rule-based';
+                document.getElementById('apiKeySection').style.display = 'none';
+            }
         });
+
+        // Mock calendar data functionality (header link)
+        document.getElementById('showMockDataLink').addEventListener('click', function(e) {
+            e.preventDefault();
+            const mockDataDiv = document.getElementById('mockCalendarData');
+            if (mockDataDiv.style.display === 'none' || mockDataDiv.style.display === '') {
+                showMockCalendarData();
+                this.textContent = '📋 Hide mock data';
+            } else {
+                mockDataDiv.style.display = 'none';
+                this.textContent = '📋 View mock data';
+            }
+        });
+
+        // Initialize default states on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('mockDataLink').style.display = 'block';
+            document.getElementById('apiKeySection').style.display = 'none'; // Hidden by default (rule-based)
+            document.getElementById('analysisToggle').checked = false; // Default to rule-based
+            
+            // Set initial calendar text for demo mode
+            document.getElementById('calendarEmail').textContent = '📧 Calendar: Demo data';
+        });
+
+        function clearResults() {
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+        }
+
+        function showMockCalendarData() {
+            const mockDataDiv = document.getElementById('mockCalendarData');
+            mockDataDiv.innerHTML = `
+                <h3>📅 Sample Calendar Events for Today (9 meetings)</h3>
+                <div class="mock-event">
+                    <div class="mock-event-title">Daily Standup</div>
+                    <div class="mock-event-time">⏰ 9:00 AM - 9:15 AM</div>
+                    <div class="mock-event-description">Daily team sync - Share progress, blockers, and today's plans</div>
+                </div>
+                <div class="mock-event">
+                    <div class="mock-event-title">Client Demo - Syncup</div>
+                    <div class="mock-event-time">⏰ 10:30 AM - 11:30 AM</div>
+                    <div class="mock-event-description">Product demonstration for Syncup client. Showcase new features</div>
+                </div>
+                <div class="mock-event">
+                    <div class="mock-event-title">Sprint Planning Sprint 4</div>
+                    <div class="mock-event-time">⏰ 11:00 AM - 12:30 PM</div>
+                    <div class="mock-event-description">Sprint 4 planning session. Review backlog, estimate user stories</div>
+                </div>
+                <div class="mock-event">
+                    <div class="mock-event-title">Catch up call</div>
+                    <div class="mock-event-time">⏰ 1:00 PM - 1:30 PM</div>
+                    <div class="mock-event-description"></div>
+                </div>
+                <div class="mock-event">
+                    <div class="mock-event-title">Weekly Team Sync</div>
+                    <div class="mock-event-time">⏰ 2:00 PM - 3:00 PM</div>
+                    <div class="mock-event-description">Weekly team alignment meeting. Discuss sprint progress</div>
+                </div>
+                <div class="mock-event">
+                    <div class="mock-event-title">Lunch</div>
+                    <div class="mock-event-time">⏰ 12:30 PM - 1:00 PM</div>
+                    <div class="mock-event-description"></div>
+                </div>
+                <div class="mock-event">
+                    <div class="mock-event-title">Quick sync with ABC</div>
+                    <div class="mock-event-time">⏰ 3:00 PM - 3:30 PM</div>
+                    <div class="mock-event-description"></div>
+                </div>
+                <div class="mock-event">
+                    <div class="mock-event-title">Product Demo Meeting</div>
+                    <div class="mock-event-time">⏰ 4:00 PM - 5:00 PM</div>
+                    <div class="mock-event-description">Internal product demo and feature discussion</div>
+                </div>
+                <div class="mock-event">
+                    <div class="mock-event-title">Team coffee chat</div>
+                    <div class="mock-event-time">⏰ 5:30 PM - 6:00 PM</div>
+                    <div class="mock-event-description"></div>
+                </div>
+            `;
+            mockDataDiv.style.display = 'block';
+        }
 
         document.getElementById('getSummaryBtn').addEventListener('click', function() {
             const btn = this;
@@ -88,15 +207,39 @@
             results.style.display = 'none';
             error.style.display = 'none';
 
-            // Build API URL based on mode
+            // Build API URL based on mode and analysis type
             let apiUrl = '/get_summary';
             const params = new URLSearchParams();
             
             if (currentMode === 'demo') {
                 params.append('demo', 'true');
-                const claudeKey = document.getElementById('claudeApiKey').value.trim();
-                if (claudeKey) {
-                    params.append('claude_key', claudeKey);
+                
+                // Only send API key if AI analysis is selected
+                if (currentAnalysis === 'ai') {
+                    const claudeKey = document.getElementById('claudeApiKey').value.trim();
+                    if (claudeKey) {
+                        params.append('claude_key', claudeKey);
+                    } else {
+                        showError('Please enter a Claude API key for AI analysis, or switch to Rule-based mode.');
+                        btn.disabled = false;
+                        btnText.style.display = 'inline';
+                        btnLoading.style.display = 'none';
+                        return;
+                    }
+                }
+            } else {
+                // Live mode - check if AI is selected and require API key
+                if (currentAnalysis === 'ai') {
+                    const claudeKey = document.getElementById('claudeApiKey').value.trim();
+                    if (claudeKey) {
+                        params.append('claude_key', claudeKey);
+                    } else {
+                        showError('Please enter a Claude API key for AI analysis, or switch to Rule-based mode.');
+                        btn.disabled = false;
+                        btnText.style.display = 'inline';
+                        btnLoading.style.display = 'none';
+                        return;
+                    }
                 }
             }
             
@@ -106,7 +249,12 @@
 
             // Make API call
             fetch(apiUrl)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.error) {
                         showError(data.message);
@@ -115,7 +263,14 @@
                     }
                 })
                 .catch(err => {
-                    showError('Network error: Please check your internet connection.');
+                    console.error('API Error:', err);
+                    if (err.message.includes('HTTP')) {
+                        showError(`Server error: ${err.message}. Please try again.`);
+                    } else if (err.name === 'TypeError' && err.message.includes('fetch')) {
+                        showError('Network error: Please check your internet connection and try again.');
+                    } else {
+                        showError(`Error: ${err.message}. Please try again.`);
+                    }
                 })
                 .finally(() => {
                     // Reset button state
@@ -203,15 +358,24 @@
         }
 
         function formatSummaryAsBullets(summary) {
-            // Convert summary to one-liner bullet points
+            // Check if summary is a string, if not convert it
+            if (typeof summary !== 'string') {
+                console.warn('Summary is not a string:', summary);
+                summary = String(summary || 'No summary available');
+            }
+            
+            // If summary already contains bullet points, handle newlines properly
+            if (summary.includes('•')) {
+                // Replace \n with <br> for proper HTML line breaks
+                return summary.replace(/\\n/g, '<br>').replace(/\n/g, '<br>');
+            }
+            
+            // Convert summary to bullet points without truncation
             const sentences = summary.split(/[.!?]+/).filter(s => s.trim().length > 0);
             const bullets = sentences.map(sentence => {
                 const trimmed = sentence.trim();
-                // Keep only the first part if it's too long, or split at comma
-                const shortSentence = trimmed.length > 60 ? 
-                    (trimmed.includes(',') ? trimmed.split(',')[0] : trimmed.substring(0, 60) + '...') : 
-                    trimmed;
-                return `• ${shortSentence}`;
+                // Don't truncate - keep full sentence
+                return `• ${trimmed}`;
             }).join('<br>');
             return bullets;
         }
