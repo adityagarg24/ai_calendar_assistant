@@ -10,10 +10,16 @@
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   USER BROWSER  │    │   VERCEL CLOUD  │    │  EXTERNAL APIs  │
 │                 │    │                 │    │                 │
-│ • Web Interface │◄──►│ • Flask App     │◄──►│ • Google Cal API│
+│ • Web Interface │◄─1─│ • Flask App     │◄─2─│ • Google Cal API│
 │ • JavaScript    │    │ • Python Backend│    │ • OpenAI API    │
-│ • HTML/CSS      │    │ • Auto Deploy   │    │ • Claude API    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+│ • HTML/CSS      │  3 │ • Auto Deploy   │  4 │ • Claude API    │
+└─────────────────┘◄───└─────────────────┘◄───└─────────────────┘
+
+Flow Steps:
+1. User requests → Vercel Flask App
+2. Flask App → External APIs (Google/AI)
+3. API responses → Flask App
+4. Processed results → User Browser
 ```
 
 ## 📊 Detailed Component Flow
@@ -92,41 +98,58 @@
 │    USER     │
 │  Opens App  │
 └──────┬──────┘
-       │
+       │ 1
        ▼
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   BROWSER   │───►│ VERCEL/FLASK│───►│   GOOGLE    │
+│   BROWSER   │─2─►│ VERCEL/FLASK│─3─►│   GOOGLE    │
 │ Loads Page  │    │ Serves HTML │    │ CALENDAR    │
 └─────────────┘    └─────────────┘    │    API      │
        │                   │          └──────┬──────┘
-       │                   │                 │
+       │ 4                 │ 5               │ 6
        ▼                   ▼                 ▼
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
 │    USER     │    │    FLASK    │    │   EVENTS    │
-│ Clicks Get  │───►│ /get_summary│◄───│   FETCHED   │
+│ Clicks Get  │─7─►│ /get_summary│◄─8─│   FETCHED   │
 │  Summary    │    │   Route     │    │             │
 └─────────────┘    └──────┬──────┘    └─────────────┘
-       │                  │
-       │                  ▼
+       │                  │ 9
+       │ 13               ▼
        │           ┌─────────────┐    ┌─────────────┐
-       │           │AI_PROCESSOR │───►│ CLAUDE/     │
+       │           │AI_PROCESSOR │─10►│ CLAUDE/     │
        │           │ Analyzes    │    │ OPENAI API  │
        │           │   Events    │    │             │
        │           └──────┬──────┘    └─────────────┘
-       │                  │                 │
-       │                  ▼                 │
-       │           ┌─────────────┐          │
-       │           │   FLASK     │◄─────────┘
+       │                  │ 12               │ 11
+       │                  ▼                  │
+       │           ┌─────────────┐           │
+       │           │   FLASK     │◄──────────┘
        │           │ Returns AI  │
        │           │  Analysis   │
        │           └──────┬──────┘
-       │                  │
+       │                  │ 14
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
-│   BROWSER   │◄───│   JSON      │
+│   BROWSER   │◄15─│   JSON      │
 │ Displays    │    │ Response    │
 │  Results    │    │             │
 └─────────────┘    └─────────────┘
+
+Flow Steps:
+1. User opens application
+2. Browser requests page from Vercel
+3. Flask serves HTML/CSS/JS
+4. User clicks "Get Summary"
+5. Browser sends AJAX request
+6. Flask requests calendar events
+7. Google API returns events
+8. Events sent to Flask
+9. Flask calls AI Processor
+10. AI Processor queries Claude/OpenAI
+11. AI returns analysis
+12. Analysis sent back to Flask
+13. Flask formats response
+14. JSON response prepared
+15. Results displayed to user
 ```
 
 ## 🧩 Core Components Breakdown
@@ -191,6 +214,15 @@
        │                  │◄─────────────────┤
        │ 7. Access Granted│                  │
        │◄─────────────────┤                  │
+
+Authentication Steps:
+1. User accesses the application
+2. Flask checks for existing OAuth token
+3. If no token, redirect to Google OAuth
+4. User logs in with Google credentials
+5. User grants calendar access permissions
+6. Google returns OAuth token to Flask
+7. Flask grants access to calendar features
 ```
 
 ## 🚀 Deployment Architecture
@@ -202,15 +234,21 @@
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
-│  │   GITHUB    │───►│   BUILD     │───►│   DEPLOY    │         │
+│  │   GITHUB    │─1─►│   BUILD     │─2─►│   DEPLOY    │         │
 │  │ Repository  │    │  Process    │    │  Serverless │         │
 │  │             │    │             │    │  Functions  │         │
 │  │• Auto sync  │    │• Install    │    │• Global CDN │         │
-│  │• Webhooks   │    │  deps       │    │• Auto scale │         │
-│  │• Main branch│    │• Build app  │    │• HTTPS      │         │
+│  │• Webhooks   │  3 │  deps       │  4 │• Auto scale │         │
+│  │• Main branch│◄───│• Build app  │◄───│• HTTPS      │         │
 │  └─────────────┘    └─────────────┘    └─────────────┘         │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
+
+Deployment Steps:
+1. Code pushed to GitHub main branch
+2. Vercel webhook triggers build process
+3. Dependencies installed, app built
+4. Serverless functions deployed to global CDN
 ```
 
 ## 📈 Performance & Scalability
