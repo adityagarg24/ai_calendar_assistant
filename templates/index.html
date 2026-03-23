@@ -329,25 +329,12 @@
                             <div class="meeting-type-card">
                                 <h3>🆕 New Meetings</h3>
                                 <div class="meeting-count">${data.stats.new}</div>
-                                ${data.events.new && data.events.new.length > 0 ? renderEventList(data.events.new) : '<p class="no-meetings-text">No new meetings</p>'}
+                                ${data.events.new && data.events.new.length > 0 ? renderEventListWithFlags(data.events.new, data.events.without_agenda, data.overlapping_meetings) : '<p class="no-meetings-text">No new meetings</p>'}
                             </div>
                             <div class="meeting-type-card">
                                 <h3>🔄 Recurring Meetings</h3>
                                 <div class="meeting-count">${data.stats.recurring}</div>
-                                ${data.events.recurring && data.events.recurring.length > 0 ? renderEventList(data.events.recurring) : '<p class="no-meetings-text">No recurring meetings</p>'}
-                            </div>
-                        </div>
-                        
-                        <div class="meeting-type-row">
-                            <div class="meeting-type-card">
-                                <h3>📋 With Agenda</h3>
-                                <div class="meeting-count">${data.stats.with_agenda}</div>
-                                ${data.events.with_agenda && data.events.with_agenda.length > 0 ? renderEventList(data.events.with_agenda) : '<p class="no-meetings-text">No meetings with agenda</p>'}
-                            </div>
-                            <div class="meeting-type-card">
-                                <h3>❓ Without Agenda</h3>
-                                <div class="meeting-count">${data.stats.without_agenda}</div>
-                                ${data.events.without_agenda && data.events.without_agenda.length > 0 ? renderEventList(data.events.without_agenda) : '<p class="no-meetings-text">No meetings without agenda</p>'}
+                                ${data.events.recurring && data.events.recurring.length > 0 ? renderEventListWithFlags(data.events.recurring, data.events.without_agenda, data.overlapping_meetings) : '<p class="no-meetings-text">No recurring meetings</p>'}
                             </div>
                         </div>
                     </div>
@@ -378,6 +365,159 @@
                 return `• ${trimmed}`;
             }).join('<br>');
             return bullets;
+        }
+
+        function renderEventListWithFlags(events, withoutAgendaEvents, overlappingMeetings) {
+            // Create lookup sets for quick checking
+            const withoutAgendaIds = new Set((withoutAgendaEvents || []).map(e => e.id || e.title));
+            const overlappingIds = new Set();
+            
+            // Process overlapping meetings if provided
+            if (overlappingMeetings && overlappingMeetings.length > 0) {
+                overlappingMeetings.forEach(group => {
+                    group.forEach(meeting => {
+                        overlappingIds.add(meeting.id || meeting.title);
+                    });
+                });
+            }
+            
+            // Sort events by start time
+            const sortedEvents = [...events].sort((a, b) => {
+                // Convert time strings to comparable format
+                const timeA = convertTimeToMinutes(a.start_time);
+                const timeB = convertTimeToMinutes(b.start_time);
+                return timeA - timeB;
+            });
+            
+            return sortedEvents.map(event => {
+                const eventId = event.id || event.title;
+                const hasNoAgenda = withoutAgendaIds.has(eventId);
+                const isOverlapping = overlappingIds.has(eventId);
+                
+                // Build CSS classes
+                let cssClasses = 'event-item';
+                if (isOverlapping) {
+                    cssClasses += ' event-overlapping';
+                }
+                
+                return `
+                    <div class="${cssClasses}" data-event-id="${eventId}">
+                        <div class="event-title">
+                            ${event.title}
+                            ${hasNoAgenda ? `
+                                <span class="no-agenda-badge">No Agenda</span>
+                                <button class="request-agenda-btn" onclick="requestAgenda('${eventId}', '${event.title}', '${event.start_time}', '${event.end_time}', ${event.attendees || 0})">
+                                    Request agenda
+                                </button>
+                            ` : ''}
+                        </div>
+                        <div class="event-time">⏰ ${event.start_time} - ${event.end_time}</div>
+                        ${event.description ? `<div class="event-description">📋 ${event.description}</div>` : ''}
+                        <div class="email-tooltip" id="tooltip-${eventId}" style="display: none;">
+                            <div class="tooltip-content">
+                                <div class="tooltip-header">
+                                    <span>📧 Email Draft</span>
+                                    <button class="tooltip-close" onclick="closeTooltip('${eventId}')">✕</button>
+                                </div>
+                                <div class="email-draft" id="draft-${eventId}">
+                                    <div class="loading">Generating email...</div>
+                                </div>
+                                <div class="tooltip-actions">
+                                    <button class="copy-btn" onclick="copyToClipboard('${eventId}')">📋 Copy</button>
+                                    <button class="cancel-btn" onclick="closeTooltip('${eventId}')">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function convertTimeToMinutes(timeStr) {
+            // Convert "9:00 AM" or "10:30 PM" to minutes since midnight
+            const [time, period] = timeStr.split(' ');
+            const [hours, minutes] = time.split(':').map(Number);
+            
+            let totalMinutes = (hours % 12) * 60 + minutes;
+            if (period === 'PM') {
+                totalMinutes += 12 * 60;
+            }
+            
+            return totalMinutes;
+        }
+
+        // Email drafting functions
+        function requestAgenda(eventId, title, startTime, endTime, attendees) {
+            const tooltip = document.getElementById(`tooltip-${eventId}`);
+            const draftDiv = document.getElementById(`draft-${eventId}`);
+            
+            // Show tooltip
+            tooltip.style.display = 'block';
+            
+            // Show loading
+            draftDiv.innerHTML = '<div class="loading">Generating email...</div>';
+            
+            // Build API request
+            const params = new URLSearchParams({
+                event_id: eventId,
+                title: title,
+                start_time: startTime,
+                end_time: endTime,
+                attendees: attendees,
+                mode: currentAnalysis
+            });
+            
+            // Add Claude key if in AI mode
+            if (currentAnalysis === 'ai') {
+                const claudeKey = document.getElementById('claudeApiKey').value.trim();
+                if (claudeKey) {
+                    params.append('claude_key', claudeKey);
+                } else {
+                    draftDiv.innerHTML = '<div class="error">Please enter Claude API key for AI mode</div>';
+                    return;
+                }
+            }
+            
+            // Make API call
+            fetch(`/draft_email?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        draftDiv.innerHTML = `<div class="error">${data.message}</div>`;
+                    } else {
+                        draftDiv.innerHTML = `<div class="email-text">${data.email_draft}</div>`;
+                    }
+                })
+                .catch(err => {
+                    console.error('Email draft error:', err);
+                    draftDiv.innerHTML = '<div class="error">Failed to generate email. Please try again.</div>';
+                });
+        }
+        
+        function closeTooltip(eventId) {
+            const tooltip = document.getElementById(`tooltip-${eventId}`);
+            tooltip.style.display = 'none';
+        }
+        
+        function copyToClipboard(eventId) {
+            const draftDiv = document.getElementById(`draft-${eventId}`);
+            const emailText = draftDiv.querySelector('.email-text');
+            
+            if (emailText) {
+                const text = emailText.textContent;
+                navigator.clipboard.writeText(text).then(() => {
+                    // Show feedback
+                    const copyBtn = document.querySelector(`#tooltip-${eventId} .copy-btn`);
+                    const originalText = copyBtn.textContent;
+                    copyBtn.textContent = '✅ Copied!';
+                    setTimeout(() => {
+                        copyBtn.textContent = originalText;
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Copy failed:', err);
+                    alert('Failed to copy to clipboard');
+                });
+            }
         }
 
         function renderEventList(events) {

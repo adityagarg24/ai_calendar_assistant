@@ -143,6 +143,9 @@ def get_summary():
         all_events = categorization['recurring_meetings'] + categorization['new_meetings']
         total_hours = sum([(e['end_time'] - e['start_time']).total_seconds() / 3600 for e in all_events])
         
+        # Detect overlapping meetings
+        overlapping_meetings = detect_overlapping_meetings(all_events)
+        
         # Format events for display
         formatted_events = {
             'recurring': [format_event(e) for e in categorization['recurring_meetings']],
@@ -150,6 +153,12 @@ def get_summary():
             'with_agenda': [format_event(e) for e in categorization['meetings_with_agenda']],
             'without_agenda': [format_event(e) for e in categorization['meetings_without_agenda']]
         }
+        
+        # Format overlapping meetings for frontend
+        formatted_overlapping = []
+        for group in overlapping_meetings:
+            formatted_group = [format_event(e) for e in group]
+            formatted_overlapping.append(formatted_group)
         
         stats = {
             'total': len(all_events),
@@ -166,7 +175,8 @@ def get_summary():
             'summary': categorization['summary'],
             'stats': stats,
             'ai_provider': ai_provider,
-            'demo_mode': demo_mode
+            'demo_mode': demo_mode,
+            'overlapping_meetings': formatted_overlapping
         })
         
     except Exception as e:
@@ -253,9 +263,50 @@ def get_summary_demo_fallback():
         'fallback_message': 'Switched to demo mode with sample data'
     })
 
+def detect_overlapping_meetings(events):
+    """Detect meetings that overlap in time"""
+    overlapping_groups = []
+    
+    for i, event1 in enumerate(events):
+        overlaps = []
+        for j, event2 in enumerate(events):
+            if i != j:
+                # Check if events overlap
+                start1, end1 = event1['start_time'], event1['end_time']
+                start2, end2 = event2['start_time'], event2['end_time']
+                
+                # Events overlap if one starts before the other ends
+                if start1 < end2 and start2 < end1:
+                    overlaps.append(event2)
+        
+        # If this event has overlaps and we haven't already grouped it
+        if overlaps:
+            # Check if this event is already in an existing group
+            already_grouped = False
+            for group in overlapping_groups:
+                if event1 in group:
+                    already_grouped = True
+                    break
+            
+            if not already_grouped:
+                # Create new group with this event and its overlaps
+                new_group = [event1] + overlaps
+                # Remove duplicates while preserving order
+                unique_group = []
+                seen = set()
+                for event in new_group:
+                    event_id = event.get('id', event['summary'])
+                    if event_id not in seen:
+                        unique_group.append(event)
+                        seen.add(event_id)
+                overlapping_groups.append(unique_group)
+    
+    return overlapping_groups
+
 def format_event(event):
     """Format event for display"""
     return {
+        'id': event.get('id', event['summary']),
         'title': event['summary'],
         'start_time': event['start_time'].strftime('%I:%M %p').lstrip('0'),
         'end_time': event['end_time'].strftime('%I:%M %p').lstrip('0'),
@@ -265,6 +316,61 @@ def format_event(event):
         'attendees': event['attendees'],
         'recurring': event['recurring']
     }
+
+@app.route('/draft_email')
+def draft_email():
+    """Draft email to request agenda for a meeting"""
+    try:
+        # Get parameters
+        event_id = request.args.get('event_id', '')
+        title = request.args.get('title', '')
+        start_time = request.args.get('start_time', '')
+        end_time = request.args.get('end_time', '')
+        attendees = request.args.get('attendees', '0')
+        mode = request.args.get('mode', 'rule-based')
+        claude_key = request.args.get('claude_key', '').strip()
+        
+        if mode == 'rule-based':
+            # Simple rule-based email draft with better tone
+            email_draft = f"Hi,\n\nCould you share the agenda for '{title}' ({start_time} - {end_time})? It would help us come prepared.\n\nThanks!"
+            
+        elif mode == 'ai' and claude_key:
+            # AI-powered email draft
+            try:
+                # Temporarily set API key
+                os.environ['CLAUDE_API_KEY'] = claude_key
+                ai_processor = AIProcessor()
+                
+                # Create context for AI
+                meeting_context = {
+                    'title': title,
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'attendees': int(attendees) if attendees.isdigit() else 0
+                }
+                
+                email_draft = ai_processor.draft_agenda_request_email(meeting_context)
+                
+            except Exception as e:
+                print(f"❌ AI email draft failed: {e}")
+                # Fall back to rule-based
+                email_draft = f"Hi team,\n\nCould you please share the agenda for '{title}' scheduled on {start_time} - {end_time}? This will help us prepare better for the meeting.\n\nThanks!"
+        else:
+            # Default to rule-based if no valid mode
+            email_draft = f"Hi team,\n\nCould you please share the agenda for '{title}' scheduled on {start_time} - {end_time}? This will help us prepare better for the meeting.\n\nThanks!"
+        
+        return jsonify({
+            'error': False,
+            'email_draft': email_draft,
+            'mode_used': mode
+        })
+        
+    except Exception as e:
+        print(f"❌ Email draft error: {e}")
+        return jsonify({
+            'error': True,
+            'message': f'Failed to generate email draft: {str(e)}'
+        })
 
 @app.route('/health')
 def health():

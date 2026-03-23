@@ -290,6 +290,105 @@ Attendees: {event['attendees']}
             'summary': summary
         }
 
+    def draft_agenda_request_email(self, meeting_context):
+        """
+        Draft an email to request agenda for a meeting using AI
+        """
+        title = meeting_context.get('title', 'the meeting')
+        start_time = meeting_context.get('start_time', '')
+        end_time = meeting_context.get('end_time', '')
+        attendees = meeting_context.get('attendees', 0)
+        
+        if self.ai_provider == "claude":
+            return self._draft_email_with_claude(meeting_context)
+        elif self.ai_provider == "openai":
+            return self._draft_email_with_openai(meeting_context)
+        else:
+            # Fallback to simple template
+            return f"Hi team,\n\nCould you please share the agenda for '{title}' scheduled on {start_time} - {end_time}? This will help us prepare better for the meeting."
+
+    def _draft_email_with_claude(self, meeting_context):
+        """Draft email using Claude"""
+        try:
+            title = meeting_context.get('title', 'the meeting')
+            start_time = meeting_context.get('start_time', '')
+            end_time = meeting_context.get('end_time', '')
+            attendees = meeting_context.get('attendees', 0)
+            
+            prompt = f"""Draft a brief, friendly email to request the agenda for a meeting.
+
+Meeting: {title}
+Time: {start_time} - {end_time}
+Attendees: {attendees}
+
+Write a short email that:
+- Starts with "Hi" and ends with "Thanks"
+- Uses everyday English, not formal corporate speak
+- Asks for the agenda in a friendly way
+- Mentions the meeting name and time if relevant
+- Is brief and contextual
+- Skip any details that seem unclear or missing
+
+Just write the email body, nothing else."""
+            
+            response = self.claude_client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=200,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            email_draft = response.content[0].text.strip()
+            
+            # Remove any extra formatting or quotes
+            if email_draft.startswith('"') and email_draft.endswith('"'):
+                email_draft = email_draft[1:-1]
+            
+            # Ensure it has content beyond just "Hi"
+            if len(email_draft.strip()) < 10 or email_draft.strip().lower() == 'hi':
+                # Fallback if AI response is too short
+                return f"Hi,\n\nCould you share the agenda for '{title}' ({start_time} - {end_time})? It would help us come prepared.\n\nThanks!"
+            
+            return email_draft
+            
+        except Exception as e:
+            print(f"Claude email draft failed: {e}")
+            # Fallback to simple template
+            return f"Hi team,\n\nCould you please share the agenda for '{title}' scheduled on {start_time} - {end_time}? This will help us prepare better for the meeting."
+
+    def _draft_email_with_openai(self, meeting_context):
+        """Draft email using OpenAI"""
+        try:
+            title = meeting_context.get('title', 'the meeting')
+            start_time = meeting_context.get('start_time', '')
+            end_time = meeting_context.get('end_time', '')
+            attendees = meeting_context.get('attendees', 0)
+            
+            prompt = f"""Draft a professional 2-line email requesting the agenda for "{title}" scheduled {start_time} - {end_time}. Be polite and explain why an agenda would help. No subject or signature."""
+            
+            response = self.openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional assistant. Write concise, polite emails."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=150
+            )
+            
+            email_draft = response.choices[0].message.content.strip()
+            
+            # Ensure it's exactly 2 lines
+            lines = email_draft.split('\n')
+            if len(lines) > 2:
+                email_draft = '\n'.join(lines[:2])
+            
+            return email_draft
+            
+        except Exception as e:
+            print(f"OpenAI email draft failed: {e}")
+            # Fallback to simple template
+            return f"Hi team,\n\nCould you please share the agenda for '{title}' scheduled on {start_time} - {end_time}? This will help us prepare better for the meeting."
+
 
 def test_ai_processor():
     """Test function for AI processor"""
